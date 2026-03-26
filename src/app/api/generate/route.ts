@@ -2,148 +2,80 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Mistral } from "@mistralai/mistralai";
 import { NextResponse } from "next/server";
 
-export const maxDuration = 60; // Allows the function to run for up to 60 seconds
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
     const { query } = await req.json();
-    
-    // VALIDATION: Check for required API keys
+
     const geminiKey = process.env.GEMINI_API_KEY_2;
     const mistralKey = process.env.MISTRAL_API_KEY;
-    
-    if (!geminiKey) {
-      console.error("Missing GEMINI_API_KEY_2 environment variable");
-      return NextResponse.json(
-        { error: "Missing Gemini API key configuration" },
-        { status: 500 }
-      );
-    }
-    else{
-        console.log("Achieved Gemini API key configuration successfully")
-    }
-    
-    if (!mistralKey) {
-      console.error("Missing MISTRAL_API_KEY environment variable");
-      return NextResponse.json(
-        { error: "Missing Mistral API key configuration" },
-        { status: 500 }
-      );
-    }
-    else{
-        console.log("Achieved Mistral API key configuration successfully")
+
+    if (!geminiKey || !mistralKey) {
+      return NextResponse.json({ error: "Missing API Keys" }, { status: 500 });
     }
 
-    console.log("Stage 1: Initializing Architect (Gemini)...");
-    // STAGE 1: THE ARCHITECT (Gemini 1.5 Flash)
     const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    
-    const architectPrompt = `You are a UX Architect for High-Fidelity Web Games.
-User Request: "${query}"
-GOAL: Design a "Split-Deck" Interactive Application.
-REQUIRED BLUEPRINT:
-1. THE CONSOLE: 3 State Mutators, 1 Live Feed.
-2. THE VIEWPORT: Haptic Interaction, Visual Feedback.
-3. GAME LOOP: Win Condition, Game Over Condition.
-4. LIBRARY STACK: Choose Three.js, P5.js, or Matter.js. Include Tone.js.`;
+    const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
 
-    let blueprint = "";
-    try {
-      const architectResult = await model.generateContent(architectPrompt);
-      blueprint = architectResult.response.text();
-      console.log("✅ Stage 1: Blueprint generated successfully");
-    } catch (geminiError: any) {
-      console.error("❌ Gemini API Error:", geminiError.message);
-      throw new Error(`Gemini API failed: ${geminiError.message}`);
-    }
+    console.log(">> STAGE 1: Architecting Blueprint");
+    // STAGE 1: THE ARCHITECT (Gemini Refinement)
+    const architectPrompt = `You are a UX Architect. Refine this user request: "${query}".
+    Create a strict "Split-Deck" Interactive Application Blueprint.
+    CRITICAL GLOBAL RULE: Absolutely NO comments (// or /* */) are allowed in any downstream code.
+    Include: 1. Console Layout, 2. Viewport Mechanics, 3. Game Loop, 4. Library Stack (Three.js, Tone.js).`;
 
-    console.log("Stage 2: Initializing Engineer (Mistral)...");
-    // STAGE 2: THE ENGINEER (Mistral Codestral)
+    const architectResult = await geminiModel.generateContent(architectPrompt);
+    const blueprint = architectResult.response.text();
+
+    console.log(">> STAGE 2: Building Initial Code");
+    // STAGE 2: THE BUILDER (Gemini Initial Code)
+    const builderPrompt = `You are a strict Frontend Developer.
+    Draft the initial single-file HTML/JS based on this blueprint:
+    ${blueprint}
+    CRITICAL RULE: DO NOT write a single code comment. Output ONLY raw code.`;
+
+    const builderResult = await geminiModel.generateContent(builderPrompt);
+    const initialCode = builderResult.response.text();
+
+    console.log(">> STAGE 3: Polishing via Codestral");
+    // STAGE 3: THE POLISHER (Mistral Engineer)
     const mistral = new Mistral({ apiKey: mistralKey });
-    const coderPrompt = `You are the "Genesis Engine" Compiler.
-BLUEPRINT SPEC:
-${blueprint}
-STRICT CODING RULES:
-1. Single-File HTML with a Split View Layout using CSS Grid/Flex.
-2. Interactivity: Console sliders MUST use 'oninput' to update a global 'GAME_STATE'. Canvas loop reads 'GAME_STATE'.
-3. Unconventional Arsenal CDNs: Three.js, Tone.js, GSAP, Confetti.
-OUTPUT: Return ONLY raw HTML code. No markdown.`;
+    const polisherPrompt = `You are the Final Code Polisher.
+    BLUEPRINT: ${blueprint}
+    INITIAL CODE: ${initialCode}
+    TASK: 
+    1. Fix bugs and enforce the CSS Grid/Flex split layout.
+    2. Wire the 'oninput' slider events to the Viewport canvas.
+    3. STRIP ALL COMMENTS. Do not include any explanatory comments in the HTML, CSS, or JS.
+    OUTPUT: Return ONLY raw HTML code. No markdown.`;
 
-    let chatResponse;
-    try {
-      chatResponse = await mistral.chat.complete({
-        model: "codestral-latest",
-        messages: [{ role: "user", content: coderPrompt }],
-      });
-      console.log("✅ Stage 2: Code generation response received");
-    } catch (mistralError: any) {
-      console.error("❌ Mistral API Error:", mistralError.message);
-      throw new Error(`Mistral API failed: ${mistralError.message}`);
-    }
+    const chatResponse = await mistral.chat.complete({
+      model: "codestral-latest",
+      messages: [{ role: "user", content: polisherPrompt }],
+    });
 
-    // TYPE-SAFE EXTRACTION: Handle both string and ContentChunk array formats safely
+    // Type-Safe Extraction
     const rawContent = chatResponse.choices?.[0]?.message?.content;
-    console.log("Raw content type:", typeof rawContent);
-    console.log("Is array?", Array.isArray(rawContent));
-    console.log("Raw content:", rawContent);
-    
     let rawCode = "";
-    
     if (typeof rawContent === "string") {
       rawCode = rawContent;
     } else if (Array.isArray(rawContent)) {
       rawCode = rawContent.map((chunk: any) => chunk.text || "").join("");
     }
 
-    if (!rawCode) {
-      console.error("❌ No code content generated from Mistral");
-      console.error("Full response:", JSON.stringify(chatResponse, null, 2));
-      return NextResponse.json(
-        { error: "Failed to generate code from AI - empty response" },
-        { status: 500 }
-      );
-    }
-    
-    console.log("✅ Code extracted successfully, length:", rawCode.length);
-
-    // CLEANUP: Remove markdown formatting and ensure standard HTML structure
+    // Cleanup
     let cleanCode = rawCode.replace(/```html/g, "").replace(/```/g, "").trim();
     if (!cleanCode.includes("<!DOCTYPE html>")) cleanCode = "<!DOCTYPE html>\n" + cleanCode;
 
-    console.log("✅ Stage Complete: Returning blueprint and code");
-    console.log("Blueprint length:", blueprint.length);
-    console.log("Code length:", cleanCode.length);
+    console.log(">> PIPELINE COMPLETE");
+    // This perfectly matches the basic structure needed for the 'games' table dataset
     return NextResponse.json({ blueprint, code: cleanCode });
 
   } catch (error: any) {
-    console.error("❌ ERROR IN POST HANDLER:");
-    console.error("Error Object:", error);
-    console.error("Error Message:", error?.message);
-    console.error("Error Name:", error?.name);
-    console.error("Error Status:", error?.status);
-    console.error("Error Response:", error?.response);
-    
-    const errorMessage = error?.message || JSON.stringify(error) || "Unknown error";
-    const errorDetails = {
-      message: error?.message,
-      name: error?.name,
-      status: error?.status,
-      constructor: error?.constructor?.name,
-      response: error?.response ? JSON.stringify(error.response) : undefined,
-      fullError: String(error)
-    };
-    
-    console.error("Detailed Error Info:", errorDetails);
-    
+    console.error("Pipeline Error:", error);
     return NextResponse.json(
-      { 
-        error: "Server error",
-        details: errorMessage,
-        errorInfo: errorDetails,
-        blueprint: "System Failure.",
-        code: `<h3>Error</h3><p>${errorMessage}</p>`
-      },
+      { blueprint: "System Failure.", code: `<h3>Error</h3><p>${error.message}</p>` },
       { status: 500 }
     );
   }

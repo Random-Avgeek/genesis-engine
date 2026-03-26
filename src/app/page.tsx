@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Terminal, Play, Cpu, Server } from "lucide-react";
+import { Terminal, Play, Cpu, Server, Layers } from "lucide-react";
 
 export default function GenesisEngine() {
-  // State mapped to our future database structure
+  // State mapped strictly to the dataset schema for future database insertion
   const [query, setQuery] = useState("");
   const [isBuilding, setIsBuilding] = useState(false);
   const [status, setStatus] = useState("SYSTEM ONLINE");
@@ -14,33 +14,33 @@ export default function GenesisEngine() {
     blueprint: ""
   });
 
-const handleExecuteBuild = async () => {
+  const handleExecuteBuild = async () => {
     if (!query) return;
     
     setIsBuilding(true);
-    setStatus(">> INITIALIZING HYBRID PIPELINE...");
+    setStatus(">> INITIALIZING 3-TIER HYBRID PIPELINE...");
     
     try {
-      setStatus(">> TRANSMITTING TO ORBITAL COMMAND (API)...");
+      setStatus(">> STAGE 1: GEMINI ARCHITECT REFINING PROMPT...");
       
-      // Make the actual call to Phase 2 API
-      const response = await fetch("/api/generate", {
+      // Start the fetch without awaiting it immediately to allow UI updates
+      const fetchPromise = fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query }),
       });
 
+      // Sequential UI updates reflecting the 3-tier backend process
+      setTimeout(() => setStatus(">> STAGE 2: GEMINI DRAFTING INITIAL ENGINE CODE..."), 2500);
+      setTimeout(() => setStatus(">> STAGE 3: MISTRAL POLISHING & WIRING EVENTS..."), 6000);
+
+      const response = await fetchPromise;
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+      setStatus(">> RECEIVING FINAL SCHEMATICS...");
       const data = await response.json();
 
-      if (!response.ok) {
-        const apiErrorMessage = data.details || data.error || `HTTP ${response.status}`;
-        const apiErrorInfo = data.errorInfo ? JSON.stringify(data.errorInfo, null, 2) : "No additional info";
-        throw new Error(`API Error: ${apiErrorMessage}\n\nServer Details:\n${apiErrorInfo}`);
-      }
-
-      setStatus(">> RECEIVING SCHEMATICS & COMPILING CODE...");
-
-      // Update state with actual AI output, aligning with the database schema
+      // Store the final outputs into the dataset structure
       setGameData({
         title: query,
         blueprint: data.blueprint,
@@ -53,26 +53,14 @@ const handleExecuteBuild = async () => {
       console.error("Build failed:", error);
       setStatus(">> SYSTEM FAILURE: FALLBACK TRIGGERED");
       
-      // The Failsafe Mechanism
-      const errorDetails = error.message || "Could not connect to the Generative APIs.";
       setGameData({
         title: "System Error",
         blueprint: "Generation failed. Failsafe triggered.",
         code: `
-          <div style="color: #ff3333; font-family: monospace; padding: 20px; background: #1a1a1a; border-radius: 8px;">
+          <div style="color: #ff3333; font-family: monospace; padding: 20px; background: black; height: 100vh;">
             <h3>⚠️ CORE SYSTEM FAILURE</h3>
-            <p><strong>Error:</strong> ${errorDetails}</p>
-            <p style="font-size: 12px; margin-top: 15px;"><strong>Troubleshooting:</strong></p>
-            <ul style="margin-left: 20px; font-size: 12px;">
-              <li>Check if API keys in .env.local are valid</li>
-              <li>Verify internet connection</li>
-              <li>Check NetworkTab in DevTools for API response errors</li>
-              <li>Check terminal logs for detailed error messages</li>
-            </ul>
-            <details style="margin-top: 10px;">
-              <summary style="cursor: pointer; color: #00ff9d;">Click to see full error details</summary>
-              <pre style="background: #0a0a0a; padding: 10px; border-radius: 4px; overflow-x: auto; margin-top: 10px;">${JSON.stringify(error, null, 2)}</pre>
-            </details>
+            <p>${error.message || "Could not connect to the Generative APIs."}</p>
+            <p>Check your terminal for detailed logs.</p>
           </div>
         `
       });
@@ -85,7 +73,7 @@ const handleExecuteBuild = async () => {
     <div className="min-h-screen bg-[#050505] text-white flex flex-col md:flex-row font-sans">
       
       {/* LEFT PANEL: THE CONSOLE */}
-      <div className="w-full md:w-[400px] border-r border-gray-800 bg-[#0a0a0a] p-6 flex flex-col">
+      <div className="w-full md:w-[400px] border-r border-gray-800 bg-[#0a0a0a] p-6 flex flex-col z-10 shadow-2xl shadow-emerald-900/10">
         
         {/* Header */}
         <div className="mb-8 border-b border-gray-800 pb-4">
@@ -93,17 +81,20 @@ const handleExecuteBuild = async () => {
             GENESIS <span className="text-[#00ff9d]">//</span> HYBRID
           </h1>
           <p className="text-xs text-gray-500 font-mono mt-1">
-            [ CONSOLE + VIEWPORT SYNCHRONIZATION ]
+            [ 3-TIER PIPELINE SYNCHRONIZATION ]
           </p>
         </div>
 
         {/* Status Indicators */}
-        <div className="space-y-3 mb-8 font-mono text-sm">
+        <div className="space-y-3 mb-8 font-mono text-xs font-bold tracking-wider">
           <div className="flex items-center gap-3 text-[#00ff9d]">
-            <Cpu size={16} /> <span>ARCHITECT: STANDBY</span>
+            <Cpu size={16} /> <span>STAGE 1: ARCHITECT (GEMINI)</span>
           </div>
           <div className="flex items-center gap-3 text-[#00ff9d]">
-            <Server size={16} /> <span>ENGINEER: STANDBY</span>
+            <Layers size={16} /> <span>STAGE 2: BUILDER (GEMINI)</span>
+          </div>
+          <div className="flex items-center gap-3 text-[#00ff9d]">
+            <Server size={16} /> <span>STAGE 3: POLISHER (MISTRAL)</span>
           </div>
         </div>
 
@@ -144,7 +135,7 @@ const handleExecuteBuild = async () => {
 
         {/* Live Status Console */}
         <div className="mt-auto pt-6">
-          <div className="bg-black border border-gray-800 p-3 font-mono text-xs text-gray-400">
+          <div className="bg-black border border-gray-800 p-3 font-mono text-xs text-gray-400 min-h-[60px] flex items-center">
             {status}
           </div>
         </div>
@@ -155,7 +146,7 @@ const handleExecuteBuild = async () => {
         {!gameData.code ? (
           <div className="text-gray-800 font-mono tracking-widest flex flex-col items-center gap-4">
             <div className="w-24 h-24 border border-gray-800 rounded-full flex items-center justify-center animate-pulse">
-              <div className="w-1 h-1 bg-gray-600 rounded-full"></div>
+              <div className="w-1 h-1 bg-[#00ff9d] rounded-full shadow-[0_0_15px_#00ff9d]"></div>
             </div>
             AWAITING INPUT
           </div>
