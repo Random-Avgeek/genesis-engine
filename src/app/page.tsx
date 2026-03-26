@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Terminal, Play, Cpu, Server, Layers } from "lucide-react";
+import { Terminal, Play, Cpu, Server, Layers, Library } from "lucide-react";
+import { benchmarkGames } from "@/lib/benchmarks";
 
 export default function GenesisEngine() {
-  // State mapped strictly to the dataset schema for future database insertion
   const [query, setQuery] = useState("");
   const [isBuilding, setIsBuilding] = useState(false);
   const [status, setStatus] = useState("SYSTEM ONLINE");
@@ -14,6 +14,18 @@ export default function GenesisEngine() {
     blueprint: ""
   });
 
+  // Instantly loads a pre-compiled benchmark game
+  const loadBenchmark = (key: keyof typeof benchmarkGames) => {
+    const game = benchmarkGames[key];
+    setGameData({
+      title: game.title,
+      blueprint: game.blueprint,
+      code: game.code
+    });
+    setStatus(`>> LOADED BENCHMARK: ${game.title}`);
+  };
+
+  // Handles the 3-Tier AI Generation Pipeline
   const handleExecuteBuild = async () => {
     if (!query) return;
     
@@ -23,14 +35,12 @@ export default function GenesisEngine() {
     try {
       setStatus(">> STAGE 1: GEMINI ARCHITECT REFINING PROMPT...");
       
-      // Start the fetch without awaiting it immediately to allow UI updates
       const fetchPromise = fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query }),
       });
 
-      // Sequential UI updates reflecting the 3-tier backend process
       setTimeout(() => setStatus(">> STAGE 2: GEMINI DRAFTING INITIAL ENGINE CODE..."), 2500);
       setTimeout(() => setStatus(">> STAGE 3: MISTRAL POLISHING & WIRING EVENTS..."), 6000);
 
@@ -40,7 +50,6 @@ export default function GenesisEngine() {
       setStatus(">> RECEIVING FINAL SCHEMATICS...");
       const data = await response.json();
 
-      // Store the final outputs into the dataset structure
       setGameData({
         title: query,
         blueprint: data.blueprint,
@@ -73,16 +82,37 @@ export default function GenesisEngine() {
     <div className="min-h-screen bg-[#050505] text-white flex flex-col md:flex-row font-sans">
       
       {/* LEFT PANEL: THE CONSOLE */}
-      <div className="w-full md:w-[400px] border-r border-gray-800 bg-[#0a0a0a] p-6 flex flex-col z-10 shadow-2xl shadow-emerald-900/10">
+      <div className="w-full md:w-[400px] border-r border-gray-800 bg-[#0a0a0a] p-6 flex flex-col z-10 shadow-2xl shadow-emerald-900/10 overflow-y-auto">
         
         {/* Header */}
-        <div className="mb-8 border-b border-gray-800 pb-4">
+        <div className="mb-6 border-b border-gray-800 pb-4">
           <h1 className="text-3xl font-black tracking-tighter">
             GENESIS <span className="text-[#00ff9d]">//</span> HYBRID
           </h1>
           <p className="text-xs text-gray-500 font-mono mt-1">
             [ 3-TIER PIPELINE SYNCHRONIZATION ]
           </p>
+        </div>
+
+        {/* Benchmark Library Section */}
+        <div className="mb-8 border-b border-gray-800 pb-6">
+          <h3 className="text-xs font-bold tracking-widest text-gray-400 uppercase flex items-center gap-2 mb-3">
+            <Library size={14} /> Gold Standard Library
+          </h3>
+          <div className="flex flex-col gap-2">
+            <button 
+              onClick={() => loadBenchmark('projectile')}
+              className="text-left text-sm font-mono text-[#00ff9d] bg-[#111] hover:bg-[#1a1a1a] border border-gray-800 p-2 transition-colors"
+            >
+              &gt; LOAD: Projectile Mechanics
+            </button>
+            <button 
+              onClick={() => loadBenchmark('chem')}
+              className="text-left text-sm font-mono text-[#00ff9d] bg-[#111] hover:bg-[#1a1a1a] border border-gray-800 p-2 transition-colors"
+            >
+              &gt; LOAD: Isotope Stabilizer
+            </button>
+          </div>
         </div>
 
         {/* Status Indicators */}
@@ -134,7 +164,7 @@ export default function GenesisEngine() {
         </div>
 
         {/* Live Status Console */}
-        <div className="mt-auto pt-6">
+        <div className="mt-6">
           <div className="bg-black border border-gray-800 p-3 font-mono text-xs text-gray-400 min-h-[60px] flex items-center">
             {status}
           </div>

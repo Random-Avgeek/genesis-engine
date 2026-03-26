@@ -18,62 +18,64 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(geminiKey);
     const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
 
-    console.log(">> STAGE 1: Architecting Blueprint");
-    // STAGE 1: THE ARCHITECT (Gemini Refinement)
-    const architectPrompt = `You are a UX Architect. Refine this user request: "${query}".
-    Create a strict "Split-Deck" Interactive Application Blueprint.
-    CRITICAL GLOBAL RULE: Absolutely NO comments (// or /* */) are allowed in any downstream code.
-    Include: 1. Console Layout, 2. Viewport Mechanics, 3. Game Loop, 4. Library Stack (Three.js, Tone.js).`;
+    // STAGE 1: THE NARRATIVE ARCHITECT (Stealth Learning)
+    const architectPrompt = `You are a Visionary Game Designer for an EdTech platform.
+    User Request: "${query}"
+    
+    CRITICAL RULE: NO code comments allowed.
+    MANDATE: "Stealth Learning". Wrap the educational concept in a high-stakes arcade game narrative (Sci-Fi, Fantasy, etc.).
+    
+    REQUIRED BLUEPRINT:
+    1. The Lore: 1-sentence epic backstory.
+    2. Controls: Console sliders/buttons mapped to the lore (e.g., 'Thruster Power' instead of 'Velocity').
+    3. Viewport Action: Use Emoji sprites (e.g., 🚀, ☄️, 🏰) as visual metaphors.
+    4. Win Condition: User solves the underlying math/science to win.
+    5. Engine: Specify the use of Kaplay.js (Kaboom) for physics and rendering.`;
 
     const architectResult = await geminiModel.generateContent(architectPrompt);
     const blueprint = architectResult.response.text();
 
-    console.log(">> STAGE 2: Building Initial Code");
-    // STAGE 2: THE BUILDER (Gemini Initial Code)
-    const builderPrompt = `You are a strict Frontend Developer.
+    // STAGE 2: THE BUILDER (Kaplay.js Engine Integration)
+    const builderPrompt = `You are a Game Developer.
     Draft the initial single-file HTML/JS based on this blueprint:
     ${blueprint}
-    CRITICAL RULE: DO NOT write a single code comment. Output ONLY raw code.`;
+    
+    CRITICAL RULES:
+    - DO NOT write code comments.
+    - Use Kaplay.js via CDN: <script src="https://unpkg.com/kaplay@3001.0.0-alpha.21/dist/kaplay.js"></script>
+    - Initialize kaplay({ global: true, canvas: document.getElementById("game") })
+    - Use scaling emojis for sprites. Include basic Kaplay physics (body, area, pos).`;
 
     const builderResult = await geminiModel.generateContent(builderPrompt);
     const initialCode = builderResult.response.text();
 
-    console.log(">> STAGE 3: Polishing via Codestral");
-    // STAGE 3: THE POLISHER (Mistral Engineer)
+    // STAGE 3: THE RECTIFIER (Mistral Auto-Correction)
     const mistral = new Mistral({ apiKey: mistralKey });
-    const polisherPrompt = `You are the Final Code Polisher.
+    const polisherPrompt = `You are the Final Code Auditor & Rectifier.
     BLUEPRINT: ${blueprint}
     INITIAL CODE: ${initialCode}
-    TASK: 
-    1. Fix bugs and enforce the CSS Grid/Flex split layout.
-    2. Wire the 'oninput' slider events to the Viewport canvas.
-    3. STRIP ALL COMMENTS. Do not include any explanatory comments in the HTML, CSS, or JS.
-    OUTPUT: Return ONLY raw HTML code. No markdown.`;
+    
+    CRITICAL MISSION:
+    1. RECTIFY ERRORS: Fix any syntax errors, unclosed HTML tags, or undefined Kaplay variables from the Initial Code.
+    2. LAYOUT: Ensure the CSS Grid/Flex "Console vs Viewport" layout is perfectly intact.
+    3. PURGE COMMENTS: Strip absolutely ALL comments (//, /* */, ).
+    OUTPUT: Return ONLY the flawless, raw HTML code. No markdown formatting.`;
 
     const chatResponse = await mistral.chat.complete({
       model: "codestral-latest",
       messages: [{ role: "user", content: polisherPrompt }],
     });
 
-    // Type-Safe Extraction
     const rawContent = chatResponse.choices?.[0]?.message?.content;
-    let rawCode = "";
-    if (typeof rawContent === "string") {
-      rawCode = rawContent;
-    } else if (Array.isArray(rawContent)) {
-      rawCode = rawContent.map((chunk: any) => chunk.text || "").join("");
-    }
+    let rawCode = typeof rawContent === "string" ? rawContent : (Array.isArray(rawContent) ? rawContent.map((c: any) => c.text || "").join("") : "");
 
-    // Cleanup
     let cleanCode = rawCode.replace(/```html/g, "").replace(/```/g, "").trim();
     if (!cleanCode.includes("<!DOCTYPE html>")) cleanCode = "<!DOCTYPE html>\n" + cleanCode;
 
-    console.log(">> PIPELINE COMPLETE");
-    // This perfectly matches the basic structure needed for the 'games' table dataset
+    // Output perfectly matches the 'games' database structure requirements
     return NextResponse.json({ blueprint, code: cleanCode });
 
   } catch (error: any) {
-    console.error("Pipeline Error:", error);
     return NextResponse.json(
       { blueprint: "System Failure.", code: `<h3>Error</h3><p>${error.message}</p>` },
       { status: 500 }
