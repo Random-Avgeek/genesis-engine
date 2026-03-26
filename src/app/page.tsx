@@ -112,6 +112,24 @@ export default function GenesisEngine() {
             >
               &gt; LOAD: Isotope Stabilizer
             </button>
+            <button 
+              onClick={() => loadBenchmark('coder')}
+              className="text-left text-sm font-mono text-[#00ff9d] bg-[#111] hover:bg-[#1a1a1a] border border-gray-800 p-2 transition-colors"
+            >
+              &gt; LOAD: Syntax Sentinel
+            </button>
+            <button 
+              onClick={() => loadBenchmark('fantasy')}
+              className="text-left text-sm font-mono text-[#ffaa00] bg-[#111] hover:bg-[#1a1a1a] border border-gray-800 p-2 transition-colors"
+            >
+              &gt; LOAD: Rune Weaver
+            </button>
+            <button 
+              onClick={() => loadBenchmark('racer')}
+              className="text-left text-sm font-mono text-[#ff0055] bg-[#111] hover:bg-[#1a1a1a] border border-gray-800 p-2 transition-colors"
+            >
+              &gt; LOAD: Math Drift
+            </button>
           </div>
         </div>
 
