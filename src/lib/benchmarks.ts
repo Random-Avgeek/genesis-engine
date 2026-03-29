@@ -601,135 +601,339 @@ export const benchmarkGames = {
   },
   fantasy: {
     title: "Woodland Rune Weaver",
-    blueprint: "BENCHMARK: Typing-based Fantasy Shooter using Kaplay.js. Optimized with pre-calculated velocity vectors, garbage collection, and native spatial hash collisions for maximum performance.",
-    code: `<!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Fantasy Benchmark</title>
-        <script src="https://unpkg.com/kaplay@3001.0.0-alpha.21/dist/kaplay.js"></script>
-        <style>
-            body { margin: 0; display: flex; height: 100vh; background: #050505; color: white; font-family: monospace; overflow: hidden; }
-            #viewport { flex-grow: 1; position: relative; background: radial-gradient(circle at center, #0a1a0a 0%, #000 100%); }
-            #hud { position: absolute; top: 20px; right: 20px; z-index: 10; text-align: right; background: rgba(0,0,0,0.8); padding: 15px 20px; border: 1px solid #333; border-right: 3px solid #ffaa00; border-radius: 4px; pointer-events: none; }
-            .hud-line { font-size: 1.2rem; font-weight: bold; color: #aaa; }
-            .hud-line span { color: #ffaa00; }
-            .instruction { position: absolute; bottom: 20px; left: 0; width: 100%; text-align: center; color: #888; font-size: 1.2rem; z-index: 10; pointer-events: none; letter-spacing: 2px;}
-        </style>
-    </head>
-    <body>
-        <div id="viewport">
-            <div id="hud">
-                <div class="hud-line">SHADOWS BANISHED: <span id="score">0</span></div>
-            </div>
-            <div class="instruction">TYPE THE RUNES TO DEFEND THE GOLDEN WOOD</div>
+    blueprint: "BENCHMARK: Typing-based Fantasy Shooter using Kaplay.js. Optimized for performance by removing projectiles; features dynamic string matching and direct targeted destruction via keyboard input.",
+    code: `
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Woodland Rune Weaver</title>
+    <script src="https://unpkg.com/kaplay@3001.0.0-alpha.21/dist/kaplay.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            display: flex;
+            height: 100vh;
+            background: #050505;
+            color: white;
+            font-family: monospace;
+            overflow: hidden;
+        }
+        #viewport {
+            flex-grow: 1;
+            position: relative;
+            background: radial-gradient(circle at center, #0a1a0a 0%, #000 100%);
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            text-align: right;
+            background: rgba(0,0,0,0.8);
+            padding: 15px 20px;
+            border: 1px solid #333;
+            border-right: 3px solid #ffaa00;
+            border-radius: 4px;
+            pointer-events: none;
+        }
+        .hud-line { font-size: 1.2rem; font-weight: bold; color: #aaa; }
+        .hud-line span { color: #ffaa00; }
+        .instruction {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: #888;
+            font-size: 1.2rem;
+            z-index: 10;
+            pointer-events: none;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="viewport">
+        <div id="hud">
+            <div class="hud-line">SHADOWS BANISHED: <span id="score">0</span></div>
         </div>
+        <div class="instruction">TYPE THE RUNES TO DEFEND THE GOLDEN WOOD</div>
+    </div>
 
-        <script>
-            // Initialize Engine
-            kaplay({ global: true, root: document.getElementById('viewport'), background: [0, 0, 0, 0] });
+    <script>
+    kaplay({
+        global: true,
+        root: document.getElementById('viewport'),
+        background: [0, 0, 0, 0],
+    });
 
-            const words = ["mithril", "elven", "star", "rings", "wizard", "shadow", "flame", "forest", "blade", "light", "magic", "realm"];
-            let score = 0;
+    // ── constants ────────────────────────────────────────────────────────────
+    const WORDS        = ["mithril","elven","star","rings","wizard","shadow",
+                          "flame","forest","blade","light","magic","realm",
+                          "rune","oak","veil","ember","thorn","glade","science","ancient","great"
+                          "gondor,"lothlorien","rivendell","moria","balrog","ent","galadriel","sauron","isildur"
+                          "aragorn","legolas","gimli","frodo","samwise","gandalf","saruman","nazgul","orc","uruk","troll"];
+    const SPAWN_RATE   = 2;        // seconds between spawns
+    const MAX_ENEMIES  = 10;       // hard cap to keep memory flat
+    const BASE_SPEED   = 40;
+    const SPEED_SCALE  = 2;        // added speed per score point
+    const TREE_RADIUS  = 55;       // collision distance (px)
 
-            scene("main", () => {
-                const centerX = width() / 2;
-                const centerY = height() / 2;
+    // ── DOM score cache ───────────────────────────────────────────────────────
+    const scoreEl = document.getElementById('score');
 
-                // Tree with optimized collision area
-                add([ 
-                    text("🌳", { size: 100 }), 
-                    pos(centerX, centerY), 
-                    anchor("center"),
-                    area({ scale: 0.5 }), 
-                    "tree"
-                ]);
-                
-                const aura = add([ circle(60), pos(centerX, centerY), anchor("center"), color(255, 170, 0), opacity(0.2) ]);
-                onUpdate(() => { aura.scale = vec2(1 + Math.sin(time() * 3) * 0.1); });
+    scene("main", () => {
+        let score       = 0;
+        let activeEnemy = null;
 
-                let enemies = [];
-                let activeEnemy = null;
+        // ── pool: reuse arrays ────────────────────────────────────────────────
+        const pool   = [];
+        const active = [];
 
-                function spawnEnemy() {
-                    const angle = rand(0, Math.PI * 2);
-                    const dist = Math.max(width(), height()) / 1.5;
-                    const startX = centerX + Math.cos(angle) * dist;
-                    const startY = centerY + Math.sin(angle) * dist;
-                    const word = choose(words);
+        // ── tree + aura ───────────────────────────────────────────────────────
+        const cx = width()  / 2;
+        const cy = height() / 2;
 
-                    const dirX = Math.cos(angle + Math.PI);
-                    const dirY = Math.sin(angle + Math.PI);
+        add([ text("🌳", { size: 100 }), pos(cx, cy), anchor("center") ]);
 
-                    const enemy = add([
-                        text("🕷️", { size: 50 }),
-                        pos(startX, startY),
-                        anchor("center"),
-                        area({ scale: 0.8 }), 
-                        "enemy",
-                        { word: word, typed: "", dirX: dirX, dirY: dirY }
-                    ]);
-                    
-                    const textObj = enemy.add([
-                        text(word, { size: 24 }),
-                        pos(0, -40),
-                        anchor("center"),
-                        color(255, 255, 255)
-                    ]);
-                    enemy.textObj = textObj;
+        const aura = add([ circle(60), pos(cx, cy), anchor("center"),
+                           color(255, 170, 0), opacity(0.2) ]);
 
-                    enemy.onUpdate(() => {
-                        const speed = 40 + (score * 2); 
-                        enemy.move(enemy.dirX * speed, enemy.dirY * speed);
-                    });
+        // ── flash ring (single reused object) ────────────────────────────────
+        // Drawn as a circle outline: we fake an outline by layering two circles.
+        const flashRingOuter = add([ circle(46), pos(-9999, -9999), anchor("center"),
+                                     color(255, 40, 40), opacity(0) ]);
+        const flashRingInner = add([ circle(36), pos(-9999, -9999), anchor("center"),
+                                     color(0, 0, 0), opacity(0) ]);   // punch-out centre
 
-                    enemies.push(enemy);
+        let flashTimer = 0;
+
+        function triggerFlash(x, y) {
+            flashRingOuter.pos.x = x; flashRingOuter.pos.y = y;
+            flashRingInner.pos.x = x; flashRingInner.pos.y = y;
+            flashRingOuter.opacity = 0.85;
+            flashRingInner.opacity = 1;
+            flashTimer = 0.18;   // seconds to stay visible
+        }
+
+        // ── target bracket (shows which enemy is locked) ──────────────────────
+        // Two L-shaped corner markers drawn as thin rects, repositioned each frame.
+        const BRACKET_SIZE = 28;
+        const BRACKET_W    = 3;
+        // top-left corner: horizontal + vertical
+        const bTLH = add([ rect(BRACKET_SIZE, BRACKET_W), pos(-9999,-9999), color(255,80,80), opacity(0) ]);
+        const bTLV = add([ rect(BRACKET_W, BRACKET_SIZE), pos(-9999,-9999), color(255,80,80), opacity(0) ]);
+        // bottom-right corner
+        const bBRH = add([ rect(BRACKET_SIZE, BRACKET_W), pos(-9999,-9999), color(255,80,80), opacity(0) ]);
+        const bBRV = add([ rect(BRACKET_W, BRACKET_SIZE), pos(-9999,-9999), color(255,80,80), opacity(0) ]);
+
+        function updateBrackets(e) {
+            if (!e || !e._alive) {
+                [bTLH,bTLV,bBRH,bBRV].forEach(b => b.opacity = 0);
+                return;
+            }
+            const x = e.pos.x, y = e.pos.y, o = 32;
+            bTLH.pos.x = x - o;           bTLH.pos.y = y - o;           bTLH.opacity = 1;
+            bTLV.pos.x = x - o;           bTLV.pos.y = y - o;           bTLV.opacity = 1;
+            bBRH.pos.x = x + o - BRACKET_SIZE; bBRH.pos.y = y + o - BRACKET_W; bBRH.opacity = 1;
+            bBRV.pos.x = x + o - BRACKET_W;    bBRV.pos.y = y + o - BRACKET_SIZE; bBRV.opacity = 1;
+        }
+
+        // ── helpers ───────────────────────────────────────────────────────────
+
+        function chooseWord() {
+            const used  = new Set(active.map(e => e._word));
+            const avail = WORDS.filter(w => !used.has(w));
+            return choose(avail.length ? avail : WORDS);
+        }
+
+        // update the two-part label: typed portion (gold) + remaining (white)
+        function refreshLabel(e) {
+            const typed   = e._typed;
+            const remaining = e._word.slice(typed.length);
+            // We use two sibling text objects: _labelDone (gold) and _labelRest (white)
+            e._labelDone.text = typed;
+            e._labelRest.text = remaining;
+            // offset _labelRest to sit right after _labelDone
+            // approximate: each char ~14px wide at size 24
+            const charW = 13.5;
+            const totalW  = e._word.length * charW;
+            const doneW   = typed.length   * charW;
+            const restW   = remaining.length * charW;
+            e._labelDone.pos.x = -(totalW / 2) + (doneW / 2);
+            e._labelRest.pos.x =  (totalW / 2) - (restW / 2);
+        }
+
+        function resetEnemy(e, sx, sy, dx, dy, word) {
+            e.pos.x  = sx;  e.pos.y  = sy;
+            e._dx    = dx;  e._dy    = dy;
+            e._word  = word;
+            e._typed = "";
+            e._alive = true;
+            e.hidden = false;
+            e._wobble = 0;
+            refreshLabel(e);
+        }
+
+        function acquireEnemy(sx, sy, dx, dy, word) {
+            if (pool.length > 0) {
+                const e = pool.pop();
+                resetEnemy(e, sx, sy, dx, dy, word);
+                active.push(e);
+                return;
+            }
+            const e = add([
+                text("🕷️", { size: 50 }),
+                pos(sx, sy),
+                anchor("center"),
+                { _word: word, _typed: "", _dx: dx, _dy: dy, _alive: true, _wobble: 0 }
+            ]);
+
+            // two child labels: typed (gold) + remaining (white)
+            e._labelDone = e.add([ text("",   { size: 24 }), pos(0, -42), anchor("center"), color(255, 200, 0) ]);
+            e._labelRest = e.add([ text(word, { size: 24 }), pos(0, -42), anchor("center"), color(220, 220, 220) ]);
+            refreshLabel(e);
+
+            active.push(e);
+        }
+
+        function retireEnemy(e) {
+            e.hidden = true;
+            e._alive = false;
+            e._labelDone.text = "";
+            e._labelRest.text = "";
+            const idx = active.indexOf(e);
+            if (idx !== -1) active.splice(idx, 1);
+            pool.push(e);
+            if (activeEnemy === e) activeEnemy = null;
+        }
+
+        function spawnEnemy() {
+            if (active.length >= MAX_ENEMIES) return;
+            const angle = rand(0, Math.PI * 2);
+            const dist  = Math.max(width(), height()) / 1.5;
+            acquireEnemy(
+                cx + Math.cos(angle) * dist,
+                cy + Math.sin(angle) * dist,
+                Math.cos(angle + Math.PI),
+                Math.sin(angle + Math.PI),
+                chooseWord()
+            );
+        }
+
+        // single sparkle pool
+        let sparkle = null;
+        function showSparkle(x, y) {
+            if (!sparkle) {
+                sparkle = add([ text("✨", { size: 60 }), pos(x, y), anchor("center"), opacity(1) ]);
+            }
+            sparkle.pos.x = x; sparkle.pos.y = y;
+            sparkle.hidden  = false;
+            sparkle.opacity = 1;
+        }
+
+        // ── main update loop ──────────────────────────────────────────────────
+        onUpdate(() => {
+            const dt_ = dt();
+
+            // aura pulse
+            aura.scale = vec2(1 + Math.sin(time() * 3) * 0.1);
+
+            // sparkle fade
+            if (sparkle && !sparkle.hidden) {
+                sparkle.opacity -= dt_ * 4;
+                if (sparkle.opacity <= 0) sparkle.hidden = true;
+            }
+
+            // flash ring fade
+            if (flashTimer > 0) {
+                flashTimer -= dt_;
+                const t = Math.max(0, flashTimer / 0.18);
+                flashRingOuter.opacity = 0.85 * t;
+                flashRingInner.opacity = t;
+                if (flashTimer <= 0) {
+                    flashRingOuter.opacity = 0;
+                    flashRingInner.opacity = 0;
                 }
+            }
 
-                loop(2, spawnEnemy);
+            // brackets track active enemy
+            updateBrackets(activeEnemy);
 
-                onCollide("enemy", "tree", () => {
-                    shake(20);
-                    destroyAll("enemy");
-                    score = 0;
-                    document.getElementById('score').innerText = score;
-                    enemies.length = 0; 
-                    activeEnemy = null;
-                });
+            const speed = BASE_SPEED + score * SPEED_SCALE;
 
-                onCharInput((ch) => {
-                    ch = ch.toLowerCase();
-                    
-                    if (!activeEnemy) {
-                        activeEnemy = enemies.find(e => e.word.startsWith(ch));
-                    }
+            for (let i = active.length - 1; i >= 0; i--) {
+                const e = active[i];
 
-                    if (activeEnemy) {
-                        if (activeEnemy.word[activeEnemy.typed.length] === ch) {
-                            activeEnemy.typed += ch;
-                            
-                            activeEnemy.textObj.text = activeEnemy.word;
-                            activeEnemy.textObj.use(color(255, 170, 0)); 
-                            
-                            // Defeated: Instantly banish the enemy (No missiles needed!)
-                            if (activeEnemy.typed === activeEnemy.word) {
-                                add([ text("✨", {size: 50}), pos(activeEnemy.pos), anchor("center"), lifespan(0.2) ]);
-                                destroy(activeEnemy);
-                                enemies = enemies.filter(e => e !== activeEnemy);
-                                activeEnemy = null;
-                                score++;
-                                document.getElementById('score').innerText = score;
-                            }
-                        }
-                    }
-                });
-            });
+                // wobble on targeted enemy
+                if (e === activeEnemy && e._wobble > 0) {
+                    e._wobble -= dt_ * 8;
+                    if (e._wobble < 0) e._wobble = 0;
+                }
+                const wobbleOffset = e === activeEnemy ? Math.sin(time() * 30) * e._wobble * 5 : 0;
+                e.angle = wobbleOffset;
 
-            go("main");
-        </script>
-    </body>
-    </html>`
+                e.pos.x += e._dx * speed * dt_;
+                e.pos.y += e._dy * speed * dt_;
+
+                const ddx = e.pos.x - cx, ddy = e.pos.y - cy;
+                if (ddx * ddx + ddy * ddy < TREE_RADIUS * TREE_RADIUS) {
+                    onTreeHit();
+                    return;
+                }
+            }
+        });
+
+        function onTreeHit() {
+            shake(20);
+            for (let i = active.length - 1; i >= 0; i--) retireEnemy(active[i]);
+            activeEnemy = null;
+            score = 0;
+            scoreEl.textContent = "0";
+            [bTLH,bTLV,bBRH,bBRV].forEach(b => b.opacity = 0);
+        }
+
+        // ── typing ────────────────────────────────────────────────────────────
+        onCharInput((ch) => {
+            ch = ch.toLowerCase();
+            if (!/[a-z]/.test(ch)) return;
+
+            if (!activeEnemy || !activeEnemy._alive) {
+                activeEnemy = active.find(e => e._alive && e._word.startsWith(ch)) || null;
+            }
+            if (!activeEnemy) return;
+
+            const expected = activeEnemy._word[activeEnemy._typed.length];
+            if (expected !== ch) {
+                // wrong key: brief red flash on the label to signal mismatch
+                activeEnemy._labelRest.color = rgb(255, 80, 80);
+                wait(0.1, () => { if (activeEnemy) activeEnemy._labelRest.color = rgb(220, 220, 220); });
+                return;
+            }
+
+            activeEnemy._typed += ch;
+            activeEnemy._wobble = 1;         // trigger wobble
+            triggerFlash(activeEnemy.pos.x, activeEnemy.pos.y);
+            refreshLabel(activeEnemy);
+
+            if (activeEnemy._typed === activeEnemy._word) {
+                showSparkle(activeEnemy.pos.x, activeEnemy.pos.y);
+                retireEnemy(activeEnemy);
+                score++;
+                scoreEl.textContent = score;
+            }
+        });
+
+        loop(SPAWN_RATE, spawnEnemy);
+    });
+
+    go("main");
+    </script>
+</body>
+</html>
+    `
   },
   racer: {
     title: "Quantum Math Drift",
